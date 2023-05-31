@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+
+    strategy:
+      matrix:
+        node-version: [16.x]
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+        with:
+          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v2.2.2
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Dependencies
+        run: pnpm i --no-frozen-lockfile
+
+      - run: pnpm run build && pnpm run build:storybook
+        # When CI is set to true, warnings will be treated as errors, and the build will fail.
+        # https://stackoverflow.com/questions/62663451/treating-warnings-as-errors-because-process-env-ci-true-failed-to-compile
+        env:
+          CI: false
+          VITE_REACT_APP_MAPTILER_KEY: ${{ secrets.VITE_REACT_APP_MAPTILER_KEY }}
+          VITE_HERE_API_KEY: ${{ secrets.VITE_HERE_API_KEY }}
+          VITE_SEGMENT_KEY: ${{ secrets.VITE_SEGMENT_KEY }}
+          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
+          VITE_LAUNCH_DARKLY_KEY: ${{ secrets.VITE_LAUNCH_DARKLY_KEY }}
+          VITE_LOCALIZATION_KEY: ${{ secrets.VITE_LOCALIZATION_KEY }}
+
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          publish: pnpm changeset publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: get-npm-version-elements-js
+        if: steps.changesets.outputs.published == 'true'
+        id: package-version-elements-js
+        uses: martinbeentjes/npm-get-version-action@main
+        with:
+          path: elements/elements-js
+
+      - name: get-npm-version-elements-react
+        if: steps.changesets.outputs.published == 'true'
+        id: package-version-elements-react
+        uses: martinbeentjes/npm-get-version-action@main
+        with:
+          path: elements/elements-react
+
+      - name: get-npm-version-sdks-js
+        if: steps.changesets.outputs.published == 'true'
+        id: package-version-sdks-js
+        uses: martinbeentjes/npm-get-version-action@main
+        with:
+          path: sdks/sdks-js
+
+      - name: get-npm-version-sdks-app
+        if: steps.changesets.outputs.published == 'true'
+        id: package-version-sdks-app
+        uses: martinbeentjes/npm-get-version-action@main
+        with:
+          path: sdks/sdks-app
+
+      - name: get-major-release-sdks-app
+        if: steps.changesets.outputs.published == 'true'
+        uses: jungwinter/split@v2
+        id: split-sdks-app
+        with:
+          msg: ${{ steps.package-version-sdks-app.outputs.current-version}}
+          separator: "."
+
+      - name: Configure AWS Credentials
+        if: steps.changesets.outputs.published == 'true'
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload S3 SDKS JS
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync sdks/sdks-js/dist s3://${{ secrets.AWS_BUCKET }}/sdks-js/${{ steps.package-version-sdks-js.outputs.current-version}} --request-payer requester
+
+      - name: Upload S3 SDKS APP (BACKUP)
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync sdks/sdks-app/dist s3://${{ secrets.AWS_BUCKET }}/sdks-app/${{ steps.package-version-sdks-app.outputs.current-version}} --request-payer requester
+
+      - name: Upload S3 SDKS APP
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync sdks/sdks-app/dist s3://${{ secrets.AWS_BUCKET }}/sdks-app/v${{ steps.split-sdks-app.outputs._0}} --request-payer requester
+
+      - name: Upload S3 Elements JS
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync elements/elements-js/dist s3://${{ secrets.AWS_BUCKET }}/elements-js/${{ steps.package-version-elements-js.outputs.current-version}} --request-payer requester
+
+      - name: Upload S3 Elements React
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync elements/elements-react/dist s3://${{ secrets.AWS_BUCKET }}/elements-react/${{ steps.package-version-elements-react.outputs.current-version}} --request-payer requester
+
+      - name: Upload S3 ACME
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync sdks/acme/dist s3://${{ secrets.AWS_BUCKET }}/acme/@latest --request-payer requester
+
+      - name: Upload S3 UI STORYBOOK
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync packages/ui/storybook-static s3://${{ secrets.AWS_BUCKET }}/ui-storybook/@latest --request-payer requester
+
+      - name: Upload S3 ELEMENTS STORYBOOK
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          aws s3 sync elements/elements-react/storybook-static s3://${{ secrets.AWS_BUCKET }}/elements-react-storybook/@latest --request-payer requester
+
+      - name: Invalidate CloudFront
+        uses: chetan/invalidate-cloudfront-action@v2
+        env:
+          DISTRIBUTION: ${{ secrets.DISTRIBUTION }}
+          PATHS: /sdks-app/v${{ steps.split-sdks-app.outputs._0}}/* /acme/@latest* /elements-react-storybook/@latest* /ui-storybook/@latest*
+          AWS_REGION: "us-east-1"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Send a Slack notification if a publish happens
+        if: steps.changesets.outputs.published == 'true'
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_USERNAME: "Deploy-o-tron"
+          SLACK_TITLE: ${{ github.event.head_commit.message }}
+          SLACK_ICON: "https://user-images.githubusercontent.com/9045634/202003202-2502ea55-a258-452b-9a02-fad96badf63a.png"
+          SLACK_MESSAGE: |
+            📌 Changelog: ${{ steps.changeset.outputs.summary }}
+            ✅ Test App: https://sdk.locallogic.co/acme/@latest
+            ✅ UI Storybook: https://sdk.locallogic.co/ui-storybook/@latest/
+            ✅ Elements Storybook: https://sdk.locallogic.co/elements-react-storybook/@latest/
+            ✅ SDKs JS v${{ steps.package-version-sdks-js.outputs.current-version}}: https://sdk.locallogic.co/sdks-js/${{ steps.package-version-sdks-js.outputs.current-version}}/index.umd.js
+            ✅ Elements JS v${{ steps.package-version-elements-js.outputs.current-version}}: https://sdk.locallogic.co/elements-js/${{ steps.package-version-elements-js.outputs.current-version}}/index.umd.js
+            ✅ Elements React v${{ steps.package-version-elements-react.outputs.current-version}}: https://sdk.locallogic.co/elements-react/${{ steps.package-version-elements-react.outputs.current-version}}/index.umd.js
+
+      - name: Create Sentry release
+        if: steps.changesets.outputs.published == 'true'
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          ignore_missing: true
+          environment: production
+          version: ${{ steps.package-version-sdks-app.outputs.current-version}}
+          sourcemaps: "sdks/sdks-app/dist/"
+          dist: ${{ github.sha }}

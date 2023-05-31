@@ -1,0 +1,26 @@
+{
+  "extends": "tsconfig/react-library.json",
+  "compilerOptions": {
+    "declaration": false,
+    "paths": {
+      "~/*": [
+        "../../apps/report/src/*"
+      ]
+    },
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "incremental": true,
+    "esModuleInterop": true,
+    "preserveSymlinks": true,
+    "jsx": "preserve"
+  },
+  "include": [
+    "./src/**/*",
+    "./global.d.ts",
+    "./vite-env.d.ts",
+    "./env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

@@ -1,0 +1,15 @@
+name: Vercel Insights Explorer Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/insights-explorer/CHANGELOG.md'
+
+jobs:
+  vercel-insights-explorer:
+    runs-on: ubuntu-latest
+    name: "Deploying insights explorer to Vercel"
+    steps:
+      - run: curl -X POST ${{ secrets.VERCEL_IE_DEPLOY_HOOK }}

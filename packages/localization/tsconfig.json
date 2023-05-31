@@ -1,0 +1,10 @@
+{
+  "extends": "tsconfig/react-library.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["./src", "./vite-env.d.ts"],
+  "exclude": ["dist", "build", "node_modules"]
+}

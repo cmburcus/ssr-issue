@@ -1,0 +1,14 @@
+{
+  "eslint.workingDirectories": [
+    { "pattern": "./packages/*/" },
+    { "pattern": "./sdks/*/" },
+    { "pattern": "./elements/*/" },
+    { "pattern": "./apps/*/" }
+  ],
+  "favorites.resources": [
+    {
+      "filePath": "sdks/sdks-js/example/index.ts",
+      "group": "Default"
+    }
+  ]
+}

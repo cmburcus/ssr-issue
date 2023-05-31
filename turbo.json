@@ -1,0 +1,32 @@
+{
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"]
+    },
+    "build:staging": {
+      "dependsOn": ["^build:staging"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "check-types": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "dependsOn": ["^build"]
+    },
+    "locale-push-demographics": {
+      "outputs": []
+    },
+    "locale-invalidate": {
+      "outputs": []
+    }
+  }
+}

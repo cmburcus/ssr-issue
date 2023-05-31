@@ -1,0 +1,107 @@
+name: Deploy Staging
+
+on:
+  pull_request:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  deploy-staging:
+    name: Deploy Staging
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [16.x]
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+        with:
+          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v2.2.2
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v1
+        with:
+          message: |
+            ## 🤖 Deploy-o-tron
+
+            Your pull request is being automatically deployed to staging. This can take a few minutes.
+
+            ![zSoB22z](https://user-images.githubusercontent.com/9045634/200682758-e7b4929c-91bf-4b15-a4d1-b06bb5c10940.gif)
+          comment_includes: "🤖 Deploy-o-tron"
+
+      - name: Install Dependencies
+        run: pnpm i --no-frozen-lockfile
+
+      - run: APP_VERSION=${{ github.event.pull_request.id }} NODE_ENV=production pnpm run build:staging && pnpm run build:storybook
+        # When CI is set to true, warnings will be treated as errors, and the build will fail.
+        # https://stackoverflow.com/questions/62663451/treating-warnings-as-errors-because-process-env-ci-true-failed-to-compile
+        env:
+          CI: false
+          VITE_REACT_APP_MAPTILER_KEY: ${{ secrets.VITE_REACT_APP_MAPTILER_KEY }}
+          VITE_HERE_API_KEY: ${{ secrets.VITE_HERE_API_KEY }}
+          VITE_SEGMENT_KEY: ${{ secrets.VITE_SEGMENT_KEY }}
+          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
+          VITE_LAUNCH_DARKLY_KEY: ${{ secrets.VITE_LAUNCH_DARKLY_KEY_STAGING }}
+          VITE_LOCALIZATION_KEY: ${{ secrets.VITE_LOCALIZATION_KEY }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: us-east-1
+
+      - name: Upload S3 SDKS JS STAGING
+        run: |
+          aws s3 sync sdks/sdks-js/dist s3://${{ secrets.AWS_BUCKET_STAGING }}/sdks-js/${{ github.event.pull_request.id }} --request-payer requester
+
+      - name: Upload S3 SDKS APP STAGING
+        run: |
+          aws s3 sync sdks/sdks-app/dist s3://${{ secrets.AWS_BUCKET_STAGING }}/sdks-app/${{ github.event.pull_request.id }} --request-payer requester
+
+      - name: Upload S3 SDKS ACME STAGING
+        run: |
+          aws s3 sync sdks/acme/dist s3://${{ secrets.AWS_BUCKET_STAGING }}/acme/${{ github.event.pull_request.id }} --request-payer requester
+
+      - name: Upload S3 UI STORYBOOK STAGING
+        run: |
+          aws s3 sync packages/ui/storybook-static s3://${{ secrets.AWS_BUCKET_STAGING }}/ui-storybook/${{ github.event.pull_request.id }} --request-payer requester
+
+      - name: Upload S3 ELEMENTS STORYBOOK STAGING
+        run: |
+          aws s3 sync elements/elements-react/storybook-static s3://${{ secrets.AWS_BUCKET_STAGING }}/elements-react-storybook/${{ github.event.pull_request.id }} --request-payer requester
+
+      - name: Invalidate CloudFront
+        uses: chetan/invalidate-cloudfront-action@v2
+        env:
+          DISTRIBUTION: ${{ secrets.DISTRIBUTION_STAGING }}
+          PATHS: "/sdks-app/${{ github.event.pull_request.id }}/* /acme/${{ github.event.pull_request.id }}/* /sdks-js/${{ github.event.pull_request.id }}/* /ui-storybook/${{ github.event.pull_request.id }}/* /elements-react-storybook/${{ github.event.pull_request.id }}/*"
+          AWS_REGION: "us-east-1"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+
+      - name: Edit PR comment
+        uses: thollander/actions-comment-pull-request@v1
+        with:
+          message: |
+            ## 🤖 Deploy-o-tron
+
+            We have lift off! Your pull request has been automatically deployed to staging.
+
+            ✅ Preview: https://staging.locallogic.co/acme/${{ github.event.pull_request.id }}
+            ✅ SDKS JS Script: https://staging.locallogic.co/sdks-js/${{ github.event.pull_request.id }}/index.umd.js
+            ✅ UI Storybook: https://staging.locallogic.co/ui-storybook/${{ github.event.pull_request.id }}/
+            ✅ Elements Storybook: https://staging.locallogic.co/elements-react-storybook/${{ github.event.pull_request.id }}/
+
+            ![My work here is done](https://user-images.githubusercontent.com/9045634/200683057-cfc15483-be46-4b25-a460-fb11050e58f6.gif)
+          comment_includes: "🤖 Deploy-o-tron"

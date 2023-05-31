@@ -1,0 +1,55 @@
+{
+  "name": "@local-logic/localization",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.umd.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.umd.js"
+    }
+  },
+  "typings": "./dist/index.d.ts",
+  "sideEffects": false,
+  "license": "MIT",
+  "files": [
+    "dist/**"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:staging": "vite build --mode=staging",
+    "stats": "STATS=1 vite build",
+    "size": "pnpm run build && size-limit",
+    "lint": "TIMING=1 npx eslint --ext .js,.jsx,.ts,.tsx .",
+    "check-types": "npx tsc --project ./tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build",
+    "clean": "rm -rf .turbo && rm -rf node_modules && rm -rf dist"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.16.11",
+    "@babel/preset-react": "^7.16.7",
+    "@babel/preset-typescript": "^7.16.7",
+    "@local-logic/eslint-config": "workspace:*",
+    "@types/react": "^18.0.27",
+    "@types/react-dom": "^18.0.4",
+    "@vitejs/plugin-react": "^2.1.0",
+    "react": "^18.1.0",
+    "react-dom": "^18.1.0",
+    "size-limit": "^7.0.8",
+    "tsconfig": "workspace:*",
+    "typescript": "^4.5.3",
+    "vite": "^3.1.8",
+    "vite-plugin-dts": "^1.2.0"
+  },
+  "dependencies": {
+    "@transifex/native": "^5.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
